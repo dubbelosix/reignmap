@@ -1,8 +1,11 @@
 use std::arch::global_asm;
 use std::collections::HashMap;
 use std::hash::Hash;
+use serde::{Serialize, Deserialize};
+use serde::de::DeserializeOwned;
+use bincode;
 
-#[derive(Debug)]
+#[derive(Debug,Serialize,Deserialize,Clone)]
 enum IndexProof {
     E(usize),
     NE(usize,usize)
@@ -12,7 +15,6 @@ enum IndexProof {
 struct SovereignMap<K, V> {
     // prover only
     map: HashMap<K,V>,
-    store_array_index: usize,
     insert_observed_get_count: usize,
 
     // hints: need to be populated for the zk run
@@ -24,10 +26,12 @@ struct SovereignMap<K, V> {
 
     // zk items: need to be 0 for the zk run, but can be used by prover
     original_input_array: Vec<(K,V)>,
+    current_get_count: usize,
+    store_array_index: usize,
 
 }
 
-impl<K: Eq+Hash+Ord+Clone, V:Clone> SovereignMap<K, V> {
+impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned, V:Clone+Serialize+DeserializeOwned> SovereignMap<K, V> {
 
     pub fn new() -> SovereignMap<K, V> {
         SovereignMap {
@@ -39,17 +43,40 @@ impl<K: Eq+Hash+Ord+Clone, V:Clone> SovereignMap<K, V> {
             store_array_index: 0,
             insert_observed_get_count: 0,
             get_count: 0,
-            original_input_array: vec![]
+            original_input_array: vec![],
+            current_get_count: 0,
+
 
         }
     }
 
     pub fn get_hints(&self) -> Vec<u8> {
-        vec![]
+        bincode::serialize(&(
+            &self.get_count,
+            &self.store_array_snaps,
+            &self.store_array_sort_proofs,
+            &self.access_pattern,
+            &self.get_count_switch_tracker
+        )).unwrap()
     }
 
     pub fn set_hints(&mut self, hints: &[u8]) {
-
+        let (get_count,
+            store_array_snaps,
+            store_array_sort_proofs,
+            access_pattern,
+            get_count_switch_tracker): (
+            usize,
+            Vec<Vec<(K, V)>>,
+            Vec<Vec<usize>>,
+            Vec<IndexProof>,
+            Vec<usize>,
+        ) = bincode::deserialize(hints).unwrap();
+        self.get_count = get_count;
+        self.store_array_snaps=store_array_snaps;
+        self.store_array_sort_proofs = store_array_sort_proofs;
+        self.access_pattern=access_pattern;
+        self.get_count_switch_tracker=get_count_switch_tracker;
     }
 
     #[cfg(feature = "prover")]
@@ -88,6 +115,28 @@ impl<K: Eq+Hash+Ord+Clone, V:Clone> SovereignMap<K, V> {
         val
     }
 
+    #[cfg(feature = "zk")]
+    pub fn insert(&mut self, key: K, val: V) {
+        self.original_input_array.push((key, val));
+    }
+
+    #[cfg(feature = "zk")]
+    pub fn get(&mut self, key: K) -> Option<&V> {
+        self.current_get_count += 1;
+        if self.current_get_count > self.get_count {
+            panic!("zk gets exceeded hint populated gets");
+        }
+        if self.current_get_count > self.get_count_switch_tracker[0] {
+            self.store_array_index += 1
+        }
+        let sindex = self.access_pattern[self.current_get_count - 1].clone();
+        match sindex {
+            IndexProof::E(idx) => Some(&self.store_array_snaps[self.store_array_index][idx].1),
+            IndexProof::NE(_,_) => None
+        }
+    }
+
+
     pub fn bin_search(&self, target_value: &K) -> IndexProof{
         let mut low = 0usize;
         let mut high = self.store_array_snaps[self.store_array_index].len() - 1;
@@ -121,18 +170,18 @@ mod tests {
 
     #[test]
     fn map_test() {
-        let mut sm: SovereignMap<&str,u32> = SovereignMap::new();
-        sm.insert("rohan", 10);
-        sm.insert("philippe", 20);
-        assert_eq!(*sm.get("rohan").unwrap(), 10);
-        sm.insert("kevin", 30);
-        assert_eq!(*sm.get("rohan").unwrap(), 10);
-        assert_eq!(*sm.get("rohan").unwrap(), 10);
-        assert_eq!(*sm.get("rohan").unwrap(), 10);
-        assert_eq!(*sm.get("philippe").unwrap(), 20);
-        assert_eq!(sm.get("plato"), None);
-        sm.insert("plato", 40);
-        assert_eq!(*sm.get("plato").unwrap(), 40);
+        let mut sm: SovereignMap<String,u32> = SovereignMap::new();
+        sm.insert(String::from("rohan"), 10);
+        sm.insert(String::from("philippe"), 20);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        sm.insert(String::from("kevin"), 30);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("philippe")).unwrap(), 20);
+        assert_eq!(sm.get(String::from("plato")), None);
+        sm.insert(String::from("plato"), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
 
         println!("{:?}",sm);
     }

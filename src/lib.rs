@@ -10,7 +10,7 @@ use bs58;
 #[derive(Debug,Serialize,Deserialize,Clone)]
 enum IndexProof {
     E(usize),
-    NE(usize,usize)
+    NE(i32,i32)
 }
 
 #[derive(Debug)]
@@ -126,11 +126,14 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
     #[cfg(feature = "zk")]
     pub fn get(&mut self, key: K) -> Option<&V> {
         // TODO: missing a lot of checks here, including sort etc, but will add them later
+        // println!("{:?}",&key);
         self.current_get_count += 1;
         if self.current_get_count > self.get_count {
             panic!("zk gets exceeded hint populated gets");
         }
-        if self.current_get_count > self.get_count_switch_tracker[0] {
+
+        if self.get_count_switch_tracker.len()>0 && (self.current_get_count > self.get_count_switch_tracker[0]) {
+            // println!("{}, {:?} POPPING",self.current_get_count, self.get_count_switch_tracker);
             self.store_array_index += 1;
             self.get_count_switch_tracker.drain(0..1);
         }
@@ -161,10 +164,14 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
             }
 
             if val > target_value {
-                high = mid - 1;
+                if mid != 0 {
+                    high = mid - 1;
+                } else {
+                    break
+                }
             }
         }
-        IndexProof::NE(mid-1, mid)
+        IndexProof::NE(mid as i32 -1, mid as i32)
     }
 }
 
@@ -184,6 +191,8 @@ mod tests {
         sm.insert(String::from("philippe"), 20);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
         sm.insert(String::from("kevin"), 30);
+        assert_eq!(sm.get(String::from("carthage")), None);
+        assert_eq!(sm.get(String::from("gilgamesh")), None);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
@@ -191,6 +200,20 @@ mod tests {
         assert_eq!(sm.get(String::from("plato")), None);
         sm.insert(String::from("plato"), 40);
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(sm.get(String::from("carthage")), None);
+        assert_eq!(sm.get(String::from("pluto")), None);
+        sm.insert(String::from("carthage"), 50);
+        sm.insert(String::from("gilgamesh"), 60);
+        assert_eq!(*sm.get(String::from("carthage")).unwrap(), 50);
+        assert_eq!(*sm.get(String::from("gilgamesh")).unwrap(), 60);
+        assert_eq!(sm.get(String::from("pluto")), None);
+        sm.insert(String::from("pluto"), 70);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("philippe")).unwrap(), 20);
+        assert_eq!(*sm.get(String::from("pluto")).unwrap(), 70);
         // SET GET BLOCK
 
         println!("sm struct: {:?}\n\n",sm);
@@ -202,15 +225,18 @@ mod tests {
     fn map_test() {
 
         let mut sm: SovereignMap<String,u32> = SovereignMap::new();
-        let hints = bs58::decode("55xRYSyTCScTEPK2SeXnqnQJQzGbYtP1Urq3KM5YkFDignxK7xuCDUy32p3YNP3Akm684xfvRjqbJpdfCpULEntsk5h1x49v3m1hszgowPACJ3BZKrVg3g4SFfbnNP6AnnBK5BL5gMCL9oNaSgirPGRYjBheerSSymA5uzDxa1EQbZWNn7WdSHvgJDBt8pVjcxL5zQb6qsqqZ4b7YnNrSj5rJ42QZNG2fc6gcm6sSYtMFzdAd2br3KkUAq2S6A8sQUhS7kNHEPGKGPAnYKWPWvhmQk4xXkv35DrP1ucDqAvrq3Q7iim4xJsxdbY3sJGG7pinczWBCUVT9GwGZYPpqFmnGHhPRHEzdNtTPCB62xKjU23zsv4n2xusGE4iUpkq5AFQ3R96ziwYzF9q2Eb6jTaf2M5T6QcTF9Hc6dohi4mrwqrWFfcCQczANLqbFPSLr9MQDD33WZkpw2VuqeBubDSLFrMxVSZsLsKBcptUS3TkZGPz1CfnVmjXFZaC4iFARCP3iCw9GGCuvhbw7jPu4Hv3B5TU1wbztwfEbvGrwW1fiBCwrPGHCwZU8M9XoLhrEmbfGmubDa7").into_vec().unwrap();
+        let hints = bs58::decode("6eSa3s2hA5EM5v99RbdbZ18nRGdysEXX6fxuQNUvAtyukGNSJarPsXwpwfthdWyrojJi2pVrt7ogwKVWssVYeChUtGYWfwkKkXMoVQWBAKB43wyvgG1MaxmYWNmKFAtBHzFaiUUZRpPqLqqhrvdNgFmuXCdFQ6xEkfTB4GgbVhAt7mHrzBqD8sWzb4HT8o85zreR91TdRGr1pu9dxgVaGe4NNuWuMNXZBJd29rhwKDVzrrJsiBby3Z7LZqcGTXmnJZ4PPc6NzA2F2iBjxRre4c6JLpwdfbuifeSEUFsdyvfbinJyeUc6zm9rvGSHf1bZ5GD9qFpZkqnZv63HnL3MR5NtV4KFKLDoJaqXMav7Gi9atBMHCu96hwHtNDfnaeRGAUVUEiC5eUvZ1chCU7gsPfdPJZbSFiAuBUEM2H7Dt5oFKc8ruTpDCdhEfrxcLSKVFjLShHAup5U56r5UNmiZBykddQZDPrEgGQmU8yaY5gYVD2qRSvpMn32LRcKH27pTmwFikDcUT7isQCTVKubBZbsfJM599MtRbxJcdBPnC7cKHkpJwThVojHdtdjRiLSvXb8NNWHxi3XVxz4doXz78CseFuCpnYub22VLuUK8LQ7zexzTwdABCdWXBSiMZNThzsW5hWhk2L241G42wnPvyL8XtnQvoeDZ8K384F7fztQ5jxZREzoKqb26xxPWPCTiNaVPKa9RvRfvWJGVyyTQG1YWQtkHu6dFzerXoS9pWboJ3SV4VC4HikkhojnQ5GCZoug1YksdXz9i9zp8QajV1x1Uxj68YeoxfcNgoGrqm2cpFW8omWEgwWYEHbJ4v6S1heYbkCgmPkNq3cwnHScGasEPg6Tkvza6vtxbc8ytER9uGFPiczfLmSuniDQMjxqcwKB5rw8yNJRZWLAccG8o8zY9d25DjeFGyG18cz2VLbBCzDvqYPZ1C1u15oiKgp7g7kDzNEPEnozyeMjGwSy9fbfdLpvW2gm8wpUHVvD9jgfbtVBTFTtdFqdtBgTQdEYsnAfCjn6zoRZ9hYWQswRF9Q61eK2Rb4Kgt3SBPkZVk3eSndN8dX8QDKhmsHHdtGPoUmhQ45ELKnAWoFEetYpQDuQx6oENGvmuEnjUAM3va9vFs14ZEgptUpAAkgQwnkbUNprwEk4FpjL6jyy4rMkQsHobHts63V3xfwpoM7MWL8VrFJwLbZrFhkUybodnT2MqeeZFi6ZTGS9JB3vPyjkvWsms7gEw8ATuUZmZrL6VRmzMsuye8oNzEhVySE3XtJ3Wuu9BEDkuM1Y8GfVtjCYCHbntQn8Scf29GjVrCf3dUZjrjh").into_vec().unwrap();
         sm.set_hints(&hints);
 
         // THE PUTS AND GETS NEED TO BE IDENTICAL TO THE ONES ABOVE IN THE PROVER
+
         // SET GET BLOCK
         sm.insert(String::from("rohan"), 10);
         sm.insert(String::from("philippe"), 20);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
         sm.insert(String::from("kevin"), 30);
+        assert_eq!(sm.get(String::from("carthage")), None);
+        assert_eq!(sm.get(String::from("gilgamesh")), None);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
@@ -218,6 +244,20 @@ mod tests {
         assert_eq!(sm.get(String::from("plato")), None);
         sm.insert(String::from("plato"), 40);
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        assert_eq!(sm.get(String::from("carthage")), None);
+        assert_eq!(sm.get(String::from("pluto")), None);
+        sm.insert(String::from("carthage"), 50);
+        sm.insert(String::from("gilgamesh"), 60);
+        assert_eq!(*sm.get(String::from("carthage")).unwrap(), 50);
+        assert_eq!(*sm.get(String::from("gilgamesh")).unwrap(), 60);
+        assert_eq!(sm.get(String::from("pluto")), None);
+        sm.insert(String::from("pluto"), 70);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("philippe")).unwrap(), 20);
+        assert_eq!(*sm.get(String::from("pluto")).unwrap(), 70);
         // SET GET BLOCK
 
     }

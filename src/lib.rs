@@ -1,9 +1,11 @@
 use std::arch::global_asm;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::hash::Hash;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use bincode;
+use bs58;
 
 #[derive(Debug,Serialize,Deserialize,Clone)]
 enum IndexProof {
@@ -31,7 +33,8 @@ struct SovereignMap<K, V> {
 
 }
 
-impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned, V:Clone+Serialize+DeserializeOwned> SovereignMap<K, V> {
+impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
+    V:Clone+Serialize+DeserializeOwned+Debug> SovereignMap<K, V> {
 
     pub fn new() -> SovereignMap<K, V> {
         SovereignMap {
@@ -122,12 +125,14 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned, V:Clone+Serialize+Deserial
 
     #[cfg(feature = "zk")]
     pub fn get(&mut self, key: K) -> Option<&V> {
+        // TODO: missing a lot of checks here, including sort etc, but will add them later
         self.current_get_count += 1;
         if self.current_get_count > self.get_count {
             panic!("zk gets exceeded hint populated gets");
         }
         if self.current_get_count > self.get_count_switch_tracker[0] {
-            self.store_array_index += 1
+            self.store_array_index += 1;
+            self.get_count_switch_tracker.drain(0..1);
         }
         let sindex = self.access_pattern[self.current_get_count - 1].clone();
         match sindex {
@@ -169,8 +174,12 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "prover")]
     fn map_test() {
+
         let mut sm: SovereignMap<String,u32> = SovereignMap::new();
+
+        /// SET GET BLOCK
         sm.insert(String::from("rohan"), 10);
         sm.insert(String::from("philippe"), 20);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
@@ -182,6 +191,32 @@ mod tests {
         assert_eq!(sm.get(String::from("plato")), None);
         sm.insert(String::from("plato"), 40);
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        /// SET GET BLOCK
+
+        println!("{}",bs58::encode(sm.get_hints()).into_string());
+    }
+
+    #[test]
+    #[cfg(feature = "zk")]
+    fn map_test() {
+
+        let mut sm: SovereignMap<String,u32> = SovereignMap::new();
+        let hints = bs58::decode("55xRYSyTCScTEPK2SeXnqnQJQzGbYtP1Urq3KM5YkFDignxK7xuCDUy32p3YNP3Akm684xfvRjqbJpdfCpULEntsk5h1x49v3m1hszgowPACJ3BZKrVg3g4SFfbnNP6AnnBK5BL5gMCL9oNaSgirPGRYjBheerSSymA5uzDxa1EQbZWNn7WdSHvgJDBt8pVjcxL5zQb6qsqqZ4b7YnNrSj5rJ42QZNG2fc6gcm6sSYtMFzdAd2br3KkUAq2S6A8sQUhS7kNHEPGKGPAnYKWPWvhmQk4xXkv35DrP1ucDqAvrq3Q7iim4xJsxdbY3sJGG7pinczWBCUVT9GwGZYPpqFmnGHhPRHEzdNtTPCB62xKjU23zsv4n2xusGE4iUpkq5AFQ3R96ziwYzF9q2Eb6jTaf2M5T6QcTF9Hc6dohi4mrwqrWFfcCQczANLqbFPSLr9MQDD33WZkpw2VuqeBubDSLFrMxVSZsLsKBcptUS3TkZGPz1CfnVmjXFZaC4iFARCP3iCw9GGCuvhbw7jPu4Hv3B5TU1wbztwfEbvGrwW1fiBCwrPGHCwZU8M9XoLhrEmbfGmubDa7").into_vec().unwrap();
+        sm.set_hints(&hints);
+        /// THE PUTS AND GETS NEED TO BE IDENTICAL TO THE ONES ABOVE IN THE PROVER
+        /// SET GET BLOCK
+        sm.insert(String::from("rohan"), 10);
+        sm.insert(String::from("philippe"), 20);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        sm.insert(String::from("kevin"), 30);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
+        assert_eq!(*sm.get(String::from("philippe")).unwrap(), 20);
+        assert_eq!(sm.get(String::from("plato")), None);
+        sm.insert(String::from("plato"), 40);
+        assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
+        /// SET GET BLOCK
 
         println!("{:?}",sm);
     }

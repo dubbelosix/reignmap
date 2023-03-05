@@ -193,7 +193,7 @@ mod tests {
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
         /// SET GET BLOCK
 
-        println!("{}",bs58::encode(sm.get_hints()).into_string());
+        println!("HINTS FOR ZK: {}",bs58::encode(sm.get_hints()).into_string());
     }
 
     #[test]
@@ -218,6 +218,5 @@ mod tests {
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
         /// SET GET BLOCK
 
-        println!("{:?}",sm);
     }
 }

@@ -179,7 +179,7 @@ mod tests {
 
         let mut sm: SovereignMap<String,u32> = SovereignMap::new();
 
-        /// SET GET BLOCK
+        // SET GET BLOCK
         sm.insert(String::from("rohan"), 10);
         sm.insert(String::from("philippe"), 20);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
@@ -191,9 +191,10 @@ mod tests {
         assert_eq!(sm.get(String::from("plato")), None);
         sm.insert(String::from("plato"), 40);
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
-        /// SET GET BLOCK
+        // SET GET BLOCK
 
-        println!("HINTS FOR ZK: {}",bs58::encode(sm.get_hints()).into_string());
+        println!("sm struct: {:?}\n\n",sm);
+        println!("HINTS FOR ZK:\n\n{}\n",bs58::encode(sm.get_hints()).into_string());
     }
 
     #[test]
@@ -204,9 +205,8 @@ mod tests {
         let hints = bs58::decode("55xRYSyTCScTEPK2SeXnqnQJQzGbYtP1Urq3KM5YkFDignxK7xuCDUy32p3YNP3Akm684xfvRjqbJpdfCpULEntsk5h1x49v3m1hszgowPACJ3BZKrVg3g4SFfbnNP6AnnBK5BL5gMCL9oNaSgirPGRYjBheerSSymA5uzDxa1EQbZWNn7WdSHvgJDBt8pVjcxL5zQb6qsqqZ4b7YnNrSj5rJ42QZNG2fc6gcm6sSYtMFzdAd2br3KkUAq2S6A8sQUhS7kNHEPGKGPAnYKWPWvhmQk4xXkv35DrP1ucDqAvrq3Q7iim4xJsxdbY3sJGG7pinczWBCUVT9GwGZYPpqFmnGHhPRHEzdNtTPCB62xKjU23zsv4n2xusGE4iUpkq5AFQ3R96ziwYzF9q2Eb6jTaf2M5T6QcTF9Hc6dohi4mrwqrWFfcCQczANLqbFPSLr9MQDD33WZkpw2VuqeBubDSLFrMxVSZsLsKBcptUS3TkZGPz1CfnVmjXFZaC4iFARCP3iCw9GGCuvhbw7jPu4Hv3B5TU1wbztwfEbvGrwW1fiBCwrPGHCwZU8M9XoLhrEmbfGmubDa7").into_vec().unwrap();
         sm.set_hints(&hints);
 
-        /// THE PUTS AND GETS NEED TO BE IDENTICAL TO THE ONES ABOVE IN THE PROVER
-
-        /// SET GET BLOCK
+        // THE PUTS AND GETS NEED TO BE IDENTICAL TO THE ONES ABOVE IN THE PROVER
+        // SET GET BLOCK
         sm.insert(String::from("rohan"), 10);
         sm.insert(String::from("philippe"), 20);
         assert_eq!(*sm.get(String::from("rohan")).unwrap(), 10);
@@ -218,7 +218,7 @@ mod tests {
         assert_eq!(sm.get(String::from("plato")), None);
         sm.insert(String::from("plato"), 40);
         assert_eq!(*sm.get(String::from("plato")).unwrap(), 40);
-        /// SET GET BLOCK
+        // SET GET BLOCK
 
     }
 }

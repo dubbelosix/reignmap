@@ -34,7 +34,7 @@ struct SovereignMap<K, V> {
 }
 
 impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
-    V:Clone+Serialize+DeserializeOwned+Debug> SovereignMap<K, V> {
+    V:Eq+Clone+Serialize+DeserializeOwned+Debug> SovereignMap<K, V> {
 
     pub fn new() -> SovereignMap<K, V> {
         SovereignMap {
@@ -42,7 +42,7 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
             store_array_snaps: vec![vec![]],
             store_array_sort_proofs: vec![vec![]],
             access_pattern: vec![],
-            get_count_switch_tracker: vec![],
+            get_count_switch_tracker: vec![0],
             store_array_index: 0,
             insert_observed_get_count: 0,
             get_count: 0,
@@ -51,6 +51,35 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
 
 
         }
+    }
+
+    pub fn sort_validity_check(&self, index: usize) -> bool {
+        // println!("{:?}",self.store_array_snaps[index]);
+        // println!("{:?}",self.original_input_array);
+        if self.store_array_snaps[index].len() != self.original_input_array.len() {
+            // println!("len fail");
+            return false
+        }
+
+        let mut idx_arr = vec![self.original_input_array.len();self.original_input_array.len()];
+        for i in &self.store_array_sort_proofs[index] {
+            if idx_arr[*i] == *i || *i >= self.original_input_array.len(){
+                // println!("index array fail");
+                return false
+            }
+            idx_arr[*i] = *i;
+        }
+
+        for (c,i) in self.store_array_snaps[index].iter().enumerate() {
+            let orig_idx = self.store_array_sort_proofs[index][c];
+            let o = &self.original_input_array[orig_idx];
+            if o.0 != i.0 || o.1 != i.1 {
+                // println!("key val fail");
+                return false
+            }
+        }
+
+        true
     }
 
     pub fn get_hints(&self) -> Vec<u8> {
@@ -127,6 +156,11 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
     pub fn get(&mut self, key: K) -> Option<&V> {
         // TODO: missing a lot of checks here, including sort etc, but will add them later
         // println!("{:?}",&key);
+        if self.current_get_count == 0 {
+            if !self.sort_validity_check(self.store_array_index) {
+                panic!("prover fraud {}", self.current_get_count);
+            }
+        }
         self.current_get_count += 1;
         if self.current_get_count > self.get_count {
             panic!("zk gets exceeded hint populated gets");
@@ -135,6 +169,9 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
         if self.get_count_switch_tracker.len()>0 && (self.current_get_count > self.get_count_switch_tracker[0]) {
             // println!("{}, {:?} POPPING",self.current_get_count, self.get_count_switch_tracker);
             self.store_array_index += 1;
+            if !self.sort_validity_check(self.store_array_index) {
+                panic!("prover fraud {}", self.current_get_count);
+            }
             self.get_count_switch_tracker.drain(0..1);
         }
         let sindex = self.access_pattern[self.current_get_count - 1].clone();

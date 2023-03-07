@@ -21,6 +21,7 @@ struct SovereignMap<K, V> {
 
     // hints: need to be populated for the zk run
     get_count: usize,
+    switch_flag: bool,
     store_array_snaps: Vec<Vec<(K, V)>>,
     store_array_sort_proofs: Vec<Vec<usize>>,
     access_pattern: Vec<IndexProof>,
@@ -42,6 +43,7 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
             store_array_snaps: vec![vec![]],
             store_array_sort_proofs: vec![vec![]],
             access_pattern: vec![],
+            switch_flag: true,
             get_count_switch_tracker: vec![0],
             store_array_index: 0,
             insert_observed_get_count: 0,
@@ -115,14 +117,6 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
     pub fn insert(&mut self, key: K, val: V) {
 
         // TODO: handle duplicate key insertion. avoiding dups for now
-
-        if self.get_count > self.insert_observed_get_count {
-            self.store_array_index+=1;
-            self.store_array_snaps.push(self.store_array_snaps[self.store_array_index-1].clone());
-            self.insert_observed_get_count = self.get_count;
-            self.store_array_sort_proofs.push(vec![]);
-            self.get_count_switch_tracker.push(self.get_count);
-        }
         self.store_array_snaps[self.store_array_index].push((key.clone(),val.clone()));
         self.store_array_snaps[self.store_array_index].sort_by(|x,y| x.0.cmp(&y.0));
         self.original_input_array.push((key.clone(), val.clone()));
@@ -140,7 +134,16 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
 
     #[cfg(feature = "prover")]
     pub fn get(&mut self, key: K) -> Option<&V> {
-        self.get_count+=1;
+
+        if self.switch_flag {
+            self.store_array_index+=1;
+            self.store_array_snaps.push(self.store_array_snaps[self.store_array_index-1].clone());
+            self.insert_observed_get_count = self.get_count;
+            self.store_array_sort_proofs.push(vec![]);
+            self.get_count_switch_tracker.push(self.get_count);
+        }
+
+        self.switch_flag = false;
         let val = self.map.get(&key);
         let idx = self.bin_search(&key);
         self.access_pattern.push(idx);
@@ -182,7 +185,7 @@ impl<K: Eq+Hash+Ord+Clone+Serialize+DeserializeOwned+Debug,
     }
 
 
-    pub fn bin_search(&self, target_value: &K) -> IndexProof{
+    pub fn bin_search(&self, target_value: &K) -> IndexProof {
         let mut low = 0usize;
         let mut high = self.store_array_snaps[self.store_array_index].len() - 1;
         let a = &self.store_array_snaps[self.store_array_index];
